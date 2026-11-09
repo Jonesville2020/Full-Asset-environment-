@@ -15,6 +15,7 @@ const fields = {
 };
 let data = { floorplan: "", locations: [], people: [], assets: [] };
 let waspCsv = "";
+let floorplanObjectUrl = "";
 
 function openStorage() {
   return new Promise((resolve, reject) => {
@@ -149,8 +150,17 @@ async function remove(kind, record) {
 }
 function renderMap() {
   const img = $("#floor-image");
-  if (data.floorplan) img.src = data.floorplan; else img.removeAttribute("src");
-  $("#empty-map").hidden = !!data.floorplan;
+  if (floorplanObjectUrl) URL.revokeObjectURL(floorplanObjectUrl);
+  const image = typeof data.floorplan === "string" && data.floorplan.match(/^data:(image\/(?:png|jpeg|gif|webp));base64,([A-Za-z0-9+/]+={0,2})$/);
+  if (image) {
+    const bytes = Uint8Array.from(atob(image[2]), character => character.charCodeAt(0));
+    floorplanObjectUrl = URL.createObjectURL(new Blob([bytes], { type: image[1] }));
+    img.src = floorplanObjectUrl;
+  } else {
+    floorplanObjectUrl = "";
+    img.removeAttribute("src");
+  }
+  $("#empty-map").hidden = !!image;
   const zones = $("#zones");
   zones.replaceChildren();
   for (const location of data.locations) {
