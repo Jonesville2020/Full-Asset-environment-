@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Floorplan &amp; Inventory</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header><div><h1>Floorplan &amp; Inventory</h1><p>Your local source of truth for people, spaces, and assets.</p></div></header>
+  <main>
+    <nav aria-label="Sections">
+      <a href="#floorplan">Floorplan</a><a href="#people">People</a><a href="#assets">Assets</a><a href="#wasp">WASP comparison</a>
+    </nav>
+    <p>Runs in your browser—no Python or installation required. Data stays in this browser; export a backup to move it to another computer.</p>
+    <div class="toolbar"><button id="export-data" type="button">Download backup</button><label class="file-button">Restore backup <input id="import-data" type="file" accept=".json,application/json"></label></div>
+    <p id="message" role="status" aria-live="polite"></p>
+    <section id="floorplan">
+      <div class="section-heading"><div><h2>Floorplan</h2><p>Upload an image, then add spaces. Drag a space to move it; edit its dimensions below.</p></div></div>
+      <div class="toolbar"><label class="file-button">Choose floorplan image <input id="floor-file" type="file" accept="image/png,image/jpeg,image/gif,image/webp"></label><button id="clear-floor" type="button" class="secondary">Remove image</button></div>
+      <div id="map" class="map"><img id="floor-image" alt="Building floorplan"><div id="empty-map">Upload a floorplan image or use this blank canvas</div><div id="zones"></div></div>
+      <div class="split">
+        <form id="location-form">
+          <h3 id="location-title">Add a space</h3><input name="id" type="hidden">
+          <label>Name <input name="name" required maxlength="500" placeholder="e.g. Cube A1"></label>
+          <div class="coordinates">
+            <label>Left % <input name="x" type="number" min="0" max="100" step="any" value="10" required></label>
+            <label>Top % <input name="y" type="number" min="0" max="100" step="any" value="10" required></label>
+            <label>Width % <input name="width" type="number" min="0.1" max="100" step="any" value="15" required></label>
+            <label>Height % <input name="height" type="number" min="0.1" max="100" step="any" value="15" required></label>
+          </div>
+          <div class="actions"><button>Save space</button><button type="button" class="secondary reset">Cancel</button></div>
+        </form>
+        <div><h3>Spaces</h3><div id="location-list"></div></div>
+      </div>
+    </section>
+    <section id="people">
+      <h2>People</h2><p>Move a person by changing their space. Their assigned assets follow them.</p>
+      <div class="split">
+        <form id="person-form"><h3 id="person-title">Add a person</h3><input name="id" type="hidden"><label>Name <input name="name" required maxlength="500"></label><label>Space <select name="location_id" class="location-select"></select></label><div class="actions"><button>Save person</button><button type="button" class="secondary reset">Cancel</button></div></form>
+        <div><h3>People directory</h3><div id="person-list"></div></div>
+      </div>
+    </section>
+    <section id="assets">
+      <h2>Asset inventory</h2><p>Assigned assets use the person's space. Unassigned assets can have their own space.</p>
+      <div class="split">
+        <form id="asset-form">
+          <h3 id="asset-title">Add an asset</h3><input name="id" type="hidden">
+          <label>Asset tag <input name="tag" required maxlength="500"></label>
+          <label>Name <input name="name" required maxlength="500"></label>
+          <label>Description <input name="description" maxlength="500"></label>
+          <label>Serial number <input name="serial" maxlength="500"></label>
+          <label>Status <select name="status"><option value="unverified">Unverified</option><option value="available">Available</option><option value="in use">In use</option><option value="repair">Repair</option><option value="retired">Retired</option></select></label>
+          <label>Assigned to <select name="person_id" id="asset-person"></select></label>
+          <label>Space (when unassigned) <select name="location_id" class="location-select" id="asset-location"></select></label>
+          <div class="actions"><button>Save asset</button><button type="button" class="secondary reset">Cancel</button></div>
+        </form>
+        <div><h3>Inventory <span id="asset-count"></span></h3><label>Search <input id="asset-search" type="search" placeholder="Tag, person, space, status…"></label><div id="asset-list"></div></div>
+      </div>
+    </section>
+    <section id="wasp">
+      <h2>WASP CSV comparison</h2><p>Export all assets from WASP as CSV, select the file, and map its columns. Comparison never changes your inventory.</p>
+      <label class="file-button">Choose WASP CSV <input id="wasp-file" type="file" accept=".csv,text/csv"></label>
+      <div id="mapping" hidden><h3>Map columns</h3><p>Only mapped fields are compared. Asset tag is required.</p><div id="mapping-fields" class="mapping-fields"></div><div class="actions"><button type="button" id="compare">Compare</button><button type="button" id="import" class="secondary">Import new assets only</button></div><p>Import never overwrites existing assets. Unknown people, spaces, or statuses are skipped; create or correct them first. Unmapped status is unverified.</p></div>
+      <div id="comparison" aria-live="polite"></div>
+    </section>
+  </main>
+  <footer>Inventory data is saved in this browser. Download a backup regularly, especially before clearing browser data or switching computers.</footer>
+</body>
+</html>
