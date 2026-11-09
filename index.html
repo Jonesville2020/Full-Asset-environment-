@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Floorplan &amp; Inventory</title>
-  <link rel="stylesheet" href="/style.css">
-  <script src="/app.js" defer></script>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
 </head>
 <body>
   <header><div><h1>Floorplan &amp; Inventory</h1><p>Your local source of truth for people, spaces, and assets.</p></div></header>
@@ -13,6 +13,8 @@
     <nav aria-label="Sections">
       <a href="#floorplan">Floorplan</a><a href="#people">People</a><a href="#assets">Assets</a><a href="#wasp">WASP comparison</a>
     </nav>
+    <p>Runs in your browser—no Python or installation required. Data stays in this browser; export a backup to move it to another computer.</p>
+    <div class="toolbar"><button id="export-data" type="button">Download backup</button><label class="file-button">Restore backup <input id="import-data" type="file" accept=".json,application/json"></label></div>
     <p id="message" role="status" aria-live="polite"></p>
     <section id="floorplan">
       <div class="section-heading"><div><h2>Floorplan</h2><p>Upload an image, then add spaces. Drag a space to move it; edit its dimensions below.</p></div></div>
@@ -64,6 +66,6 @@
       <div id="comparison" aria-live="polite"></div>
     </section>
   </main>
-  <footer>Stored locally in SQLite. Back up your database file regularly.</footer>
+  <footer>Inventory data is saved in this browser. Download a backup regularly, especially before clearing browser data or switching computers.</footer>
 </body>
 </html>
