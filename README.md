@@ -9,8 +9,14 @@ Run locally with `python3 -m http.server 8000`, then open
 
 ## Editing and saving
 
-Turn on **Edit mode** to move, add, remove or change map labels and edit
-assets. To link a person to a room or cube, set their location note to the
+In **Assets**, choose **Add asset** to enter a device, or **Edit** beside an
+existing asset to change it. Select an assignment status and enter the
+employee, room or seat when assigned; choose Storage for stored equipment.
+Save the form to apply the change. Enter the employee's name as it appears
+on the map to link their assets to their map label.
+
+Turn on **Edit mode** to move, add, remove or change map labels. To link a
+person to a room or cube, set their location note to the
 same text as that location's label. If the person's name differs between
 the map and inventory, set their asset assignee name explicitly. Matches
 otherwise require the same name; nearby labels are only suggestions.

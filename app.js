@@ -40,6 +40,7 @@ let drag = null;
 let saveTimer = null;
 let assetPage = 1;
 let assetSort = { key: "type", dir: 1 };
+let editingAssetId = null;
 const nodes = new Map();
 const geometryNodes = new Map();
 
@@ -316,6 +317,7 @@ function afterDataReplaced() {
   index = null;
   selection = null;
   selectedShape = null;
+  closeAssetForm();
   layoutHistory = [];
   $("#undo-layout").disabled = true;
   renderGeometry();
@@ -1125,7 +1127,9 @@ function refreshOptionLists() {
   );
   $("#type-options").replaceChildren(...types.map((type) => h("option", { value: type })));
   const names = [...new Set(assets.map((a) => a.assignee).filter(Boolean))].sort();
-  const assignees = [...new Set(["Storage", ...names, ...items.filter((i) => i.k === "person").map((i) => i.t)])];
+  const assignees = [...new Set([...names.filter((name) => name !== "Storage"), ...items
+    .filter((i) => i.k === "person")
+    .map((i) => i.assignee || i.t.replace(/\s+\d+$/, ""))])].sort();
   $("#assignee-options").replaceChildren(...assignees.map((name) => h("option", { value: name })));
 }
 
@@ -1165,7 +1169,8 @@ function renderAssets() {
           onchange: (event) => updateAsset(asset, "type", event.target.value.trim()),
         })),
         h("td", {}, assigneeCell(asset)),
-        h("td", {}, h("button", { type: "button", class: "danger", "aria-label": `Delete ${asset.tag}`, onclick: () => deleteAsset(asset) }, "✕")),
+        h("td", {}, h("button", { type: "button", "aria-label": `Edit ${asset.tag || "asset"}`, onclick: () => openAssetForm(asset) }, "Edit"),
+          h("button", { type: "button", class: "danger", "aria-label": `Delete ${asset.tag}`, onclick: () => deleteAsset(asset) }, "✕")),
       );
     } else {
       row.title = asset.model ? `${asset.model}${asset.serial ? ` · S/N ${asset.serial}` : ""}` : "";
@@ -1176,6 +1181,10 @@ function renderAssets() {
         h("td", { class: "tag" }, asset.tag),
         h("td", {}, asset.type),
         h("td", {}, assigneeCell(asset)),
+        h("td", {}, h("button", {
+          type: "button", "aria-label": `Edit ${asset.tag || "asset"}`,
+          onclick: (event) => { event.stopPropagation(); openAssetForm(asset); },
+        }, "Edit")),
       );
     }
     return row;
@@ -1200,16 +1209,80 @@ function deleteAsset(asset) {
   if (selection) renderDetails();
 }
 
-function addAsset() {
-  $("#asset-search").value = "";
+function updateAssetFormStatus() {
+  const assigned = $("#asset-form-status").value === "assigned";
+  $("#asset-form-assignee-label").hidden = !assigned;
+  $("#asset-form-assignee").required = assigned;
+}
+
+function openAssetForm(asset = null) {
+  refreshOptionLists();
+  editingAssetId = asset?.id ?? null;
+  $("#asset-form-title").textContent = asset ? "Edit asset" : "Add asset";
+  $("#asset-form-tag").value = asset?.tag || "";
+  $("#asset-form-type").value = asset?.type || "";
+  $("#asset-form-status").value = asset ? statusOf(asset) : "unassigned";
+  $("#asset-form-assignee").value = asset && statusOf(asset) === "assigned" ? asset.assignee : "";
+  $("#asset-form-location").value = asset?.location || "";
+  $("#asset-form-model").value = asset?.model || "";
+  $("#asset-form-serial").value = asset?.serial || "";
+  $("#asset-form-error").hidden = true;
+  updateAssetFormStatus();
+  $("#asset-form").hidden = false;
+  $("#panel-assets").classList.add("asset-form-open");
+  $("#asset-form-tag").focus();
+}
+
+function closeAssetForm() {
+  editingAssetId = null;
+  $("#asset-form").hidden = true;
+  $("#panel-assets").classList.remove("asset-form-open");
+}
+
+function saveAssetForm(event) {
+  event.preventDefault();
+  const tag = $("#asset-form-tag").value.trim();
+  const type = $("#asset-form-type").value.trim();
+  const status = $("#asset-form-status").value;
+  let assignee = status === "assigned" ? $("#asset-form-assignee").value.trim() : status === "storage" ? "Storage" : "";
+  if (!tag || !type || (status === "assigned" && !assignee)) {
+    $("#asset-form-error").textContent = "Enter an asset tag, type, and an assignee when assigned.";
+    $("#asset-form-error").hidden = false;
+    return;
+  }
+  if (status === "assigned" && assignee.toLowerCase() === "storage") {
+    $("#asset-form-error").textContent = "Choose Storage under Assignment to mark this asset as stored.";
+    $("#asset-form-error").hidden = false;
+    return;
+  }
+  const matchingLabels = items.filter((item) => item.k === "person" && item.t === assignee);
+  if (matchingLabels.length === 1 && !matchingLabels[0].assignee) {
+    assignee = assignee.replace(/\s+\d+$/, "");
+  }
+  const existing = editingAssetId ? assets.find((asset) => asset.id === editingAssetId) : null;
+  if (editingAssetId && !existing) {
+    $("#asset-form-error").textContent = "This asset no longer exists. Cancel and try again.";
+    $("#asset-form-error").hidden = false;
+    return;
+  }
+  const values = {
+    tag, type, assignee,
+    location: $("#asset-form-location").value.trim(),
+    model: $("#asset-form-model").value.trim(),
+    serial: $("#asset-form-serial").value.trim(),
+  };
+  if (existing) Object.assign(existing, values);
+  else assets.unshift({ id: `a-${crypto.randomUUID()}`, ...values });
+  index = null;
+  $("#asset-search").value = tag;
   $("#asset-type-filter").value = "";
   $("#asset-status-filter").value = "";
-  assets.unshift({ id: `a${Date.now()}`, tag: "", type: "", assignee: "", model: "", serial: "", location: "" });
-  assetSort = { key: "none", dir: 1 };
-  index = null;
-  save();
+  assetPage = 1;
+  closeAssetForm();
   renderAssets();
-  rowsBody.querySelector("input")?.focus();
+  if (selection) renderDetails();
+  clearTimeout(saveTimer);
+  if (saveNow()) setStatus("Asset saved in this browser. Use Export to back it up or share it.");
 }
 
 function focusAsset(tag) {
@@ -1304,7 +1377,10 @@ function wire() {
     ...Object.entries(KINDS).map(([value, kind]) => h("option", { value }, kind.label)),
   );
   $("#add-item").addEventListener("click", () => addItem($("#add-kind").value));
-  $("#add-asset").addEventListener("click", addAsset);
+  $("#add-asset").addEventListener("click", () => openAssetForm());
+  $("#cancel-asset").addEventListener("click", closeAssetForm);
+  $("#asset-form-status").addEventListener("change", updateAssetFormStatus);
+  $("#asset-form").addEventListener("submit", saveAssetForm);
   $("#more-assets").addEventListener("click", () => { assetPage += 1; renderAssets(); });
   for (const id of ["#asset-search", "#asset-type-filter", "#asset-status-filter"]) {
     $(id).addEventListener("input", () => { assetPage = 1; renderAssets(); });
@@ -1372,7 +1448,7 @@ async function init() {
     renderAllItems();
     renderDetails();
     renderAssets();
-    for (const id of ["#print-map", "#report-assigned", "#report-unassigned"]) {
+    for (const id of ["#print-map", "#report-assigned", "#report-unassigned", "#add-asset"]) {
       $(id).disabled = false;
     }
     if (storageError) setStatus("Could not read saved edits in this browser. The original data is shown; export a backup before making changes.");

@@ -115,11 +115,33 @@
           </div>
           <div class="asset-bar">
             <span id="asset-count"></span>
-            <span class="edit-only">
-              <button id="add-asset" type="button">Add asset</button>
-            </span>
+            <button id="add-asset" type="button" disabled>Add asset</button>
             <button id="export-csv" type="button">Export CSV</button>
           </div>
+          <form id="asset-form" class="asset-form" hidden>
+            <h2 id="asset-form-title">Add asset</h2>
+            <p class="muted">Changes save only in this browser. Use Export to back them up.</p>
+            <label>Asset tag <input id="asset-form-tag" required autocomplete="off"></label>
+            <label>Asset type <input id="asset-form-type" list="type-options" required autocomplete="off" placeholder="e.g. Laptop or Monitor"></label>
+            <label>Assignment
+              <select id="asset-form-status">
+                <option value="unassigned">Unassigned</option>
+                <option value="assigned">Employee, room or seat</option>
+                <option value="storage">Storage</option>
+              </select>
+            </label>
+            <label id="asset-form-assignee-label" hidden>Assigned to
+              <input id="asset-form-assignee" list="assignee-options" autocomplete="off" placeholder="Enter an employee, room or seat">
+            </label>
+            <label>Recorded location <input id="asset-form-location" autocomplete="off" placeholder="Optional, e.g. Tech Storage 1171A"></label>
+            <label>Model <input id="asset-form-model" autocomplete="off"></label>
+            <label>Serial number <input id="asset-form-serial" autocomplete="off"></label>
+            <p id="asset-form-error" class="asset-form-error" role="alert" hidden></p>
+            <div class="form-actions">
+              <button type="submit">Save asset</button>
+              <button id="cancel-asset" type="button">Cancel</button>
+            </div>
+          </form>
           <div class="report-actions">
             <button id="report-assigned" type="button" disabled>Assigned asset report</button>
             <button id="report-unassigned" type="button" disabled>Unassigned / storage report</button>
@@ -131,7 +153,7 @@
                   <th><button type="button" data-sort="tag">Tag</button></th>
                   <th><button type="button" data-sort="type">Type</button></th>
                   <th><button type="button" data-sort="assignee">Assigned to</button></th>
-                  <th class="edit-only"><span class="sr-only">Delete</span></th>
+                  <th scope="col">Actions</th>
                 </tr>
               </thead>
               <tbody id="asset-rows"></tbody>
