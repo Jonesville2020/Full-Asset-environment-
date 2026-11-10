@@ -154,6 +154,55 @@ def merge_wrapped_names(items):
     return [i for i in items if id(i) not in used]
 
 
+def add_floorplan_metadata(plan):
+    # The PDF's numbered external table corresponds to BP-01 through BP-26.
+    for item in plan["items"]:
+        match = re.fullmatch(r".+?\s+(0[1-9]|1\d|2[0-6])", item["t"])
+        if (match and item["k"] in {"person", "vacant"}
+                and item["x"] < 130 and 280 < item["y"] < 510 and not item["loc"]):
+            item["loc"] = f"BP-{match.group(1)}"
+
+    # These notes are rasterized in the PDF, not extractable PDF text. The
+    # original is the authority for the two portions marked unclear.
+    groups = [
+        (221, 200, [69, 89, 109, 129, 149, 169, 189], [
+            "NEW BOILER", "LOCATION - SEE", "MECHANICAL DWGS.", "EXTEND",
+            "HOUSEKEEPING PAD -", "SEE STRUCTURAL &", "MECHANICAL DWGS.",
+        ]),
+        (315, 120, [220, 237], ["(E) CENTRAL", "PLANT"]),
+        (347, 120, [256, 273], ["(E) CENTRAL", "PLANT"]),
+        (573, 155, [247, 267, 287], ["EXISTING", "HOUSEKEEPING", "PAD"]),
+        (682, 92, [317, 335], ["SERVICE", "COURT"]),
+        (217, 300, [387, 408, 428], [
+            "CHILLER - SEE MECH.", '4" THICK HOUSEKEEPING PAD -', "SEE STRUCT.",
+        ]),
+        (557, 218, [528, 548, 568, 596, 616, 636, 656, 676, 696], [
+            "COOLING TOWER SEE", "ARCH. SITE PLAN AND", "MECHANICAL DWGS.",
+            "STEEL TUBE (WIDTH ?)", "AND METAL GRATE",
+            "ELEVATED WALKWAYS", "ON ALL SIDES OF", "COOLING TOWER TYP.",
+            "SEE DETAIL [UNCLEAR]",
+        ]),
+        (434, 82, [73], ["CUSTODIAN"]),
+        (40, 100, [616, 633], ["FIRE", "RISER"]),
+        (261, 96, [563, 580], ["EMER.", "ELEC."]),
+        (462, 56, [568], ["ELEC."]),
+    ]
+    masks = []
+    for group_index, (left, width, tops, lines) in enumerate(groups, 1):
+        for line_index, (top, text) in enumerate(zip(tops, lines), 1):
+            x = 384 + (left - 2) / 6
+            y = 298 + (top - 2) / 6
+            w, h = (width + 4) / 6, 19 / 6
+            masks.append({"x": round(x, 2), "y": round(y, 2), "w": round(w, 2), "h": round(h, 2)})
+            plan["items"].append({
+                "id": f"note-{group_index}-{line_index}", "k": "note", "t": text,
+                "x": round(x + w / 2, 1), "y": round(y + h / 2, 1),
+                "s": 3.4, "r": 0, "loc": "",
+            })
+    plan["noteMasks"] = masks
+    return plan
+
+
 def build_floorplan():
     page = fitz.open(next(ROOT.glob("Floor-Plan*.pdf")))[0]
     svg = page.get_svg_image(text_as_path=False)
@@ -166,7 +215,7 @@ def build_floorplan():
         item.pop("wrap", None)
         item["id"] = f"m{number}"
         item["loc"] = ""
-    return {"width": page.rect.width, "height": page.rect.height, "items": items}
+    return add_floorplan_metadata({"width": page.rect.width, "height": page.rect.height, "items": items})
 
 
 def main():

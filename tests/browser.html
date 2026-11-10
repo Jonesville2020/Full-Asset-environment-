@@ -79,7 +79,9 @@
     const input = doc.querySelector("#import-json");
     input.files = invalid.files;
     input.dispatchEvent(new Event("change"));
-    await wait(100);
+    for (let i = 0; i < 50 && !doc.querySelector("#status").textContent.includes("isn't a valid export"); i += 1) {
+      await wait(50);
+    }
     assert(doc.querySelector("#status").textContent.includes("isn't a valid export"), "Invalid import was not rejected");
     assert(JSON.parse(localStorage.getItem("full-asset-environment.v1")).items[1].loc === "Room 1", "Invalid import overwrote saved edits");
     const restore = loaded();

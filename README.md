@@ -14,6 +14,8 @@ assets. To link a person to a room or cube, set their location note to the
 same text as that location's label. If the person's name differs between
 the map and inventory, set their asset assignee name explicitly. Matches
 otherwise require the same name; nearby labels are only suggestions.
+The numbered external table is linked to BP-01 through BP-26, including
+vacant seats. Searching a listed person highlights their BP seat.
 
 Use **Expand map** and the zoom controls for more room on screen. **Label
 size** changes the size of the text relative to the building.
@@ -28,6 +30,12 @@ The building is an **approximate automatic trace**, not the original Visio
 drawing: walls and cubicles can be split into fragments or merged together,
 and details may be missing or misplaced. Turn on **Original reference** to
 compare and correct it before relying on the layout.
+
+The mechanical-area annotations were reconstructed as editable text from
+the PDF image. Their background masks hide the original traced lettering;
+these masks also cover any linework drawn directly behind them. Two details
+are marked unclear rather than guessed. Verify the annotations against the
+original PDF before relying on them.
 
 **Export SVG** downloads the traced paths and labels as a vector SVG for
 import into Visio via **Insert > Pictures**. It is not a native `.vsdx` file;

@@ -8,6 +8,7 @@ const KINDS = {
   ap: { label: "Access point", layer: "aps" },
   kiosk: { label: "Kiosk", layer: "other" },
   clock: { label: "Time clock", layer: "other" },
+  note: { label: "Building note", layer: "other" },
   label: { label: "Other label", layer: "other" },
   legend: { label: "Legend", layer: "other" },
 };
@@ -19,6 +20,7 @@ const $ = (selector) => document.querySelector(selector);
 const svg = $("#map");
 const itemLayer = $("#map-items");
 const geometryLayer = $("#map-geometry");
+const noteMasksLayer = $("#note-masks");
 const drawingPreview = $("#drawing-preview");
 const ring = $("#ring");
 
@@ -157,7 +159,7 @@ function peopleAt(item) {
   if (!["room", "seat"].includes(item.k)) return [];
   const keys = [item.t, item.loc].filter(Boolean).map(locKey);
   return items.filter((other) =>
-    other.k === "person" && other.loc && keys.includes(locKey(other.loc)),
+    ["person", "vacant"].includes(other.k) && other.loc && keys.includes(locKey(other.loc)),
   );
 }
 
@@ -183,10 +185,12 @@ function setStatus(message) {
 
 function saveNow() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ items, assets, geometry }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 3, items, assets, geometry }));
     setStatus("Changes saved in this browser. Use Export to back them up or share them.");
+    return true;
   } catch {
     setStatus("Could not save in this browser (storage is full or blocked). Use Export to keep your changes.");
+    return false;
   }
 }
 
@@ -196,7 +200,7 @@ function save() {
 }
 
 function exportJson() {
-  const data = JSON.stringify({ version: 2, width: plan.width, height: plan.height, items, assets, geometry }, null, 1);
+  const data = JSON.stringify({ version: 3, width: plan.width, height: plan.height, items, assets, geometry }, null, 1);
   download("floor-plan-and-assets.json", data, "application/json");
 }
 
@@ -257,11 +261,29 @@ function validData(data) {
   return true;
 }
 
+function upgradeData(data) {
+  if ((data.version ?? 0) >= 3) return data;
+  const defaults = new Map(baseSnapshot.items.map((item) => [item.id, item]));
+  const upgraded = data.items.map((item) => {
+    const original = defaults.get(item.id);
+    if (original?.loc?.startsWith("BP-") && ["person", "vacant"].includes(item.k) && !item.loc) {
+      return { ...item, loc: original.loc };
+    }
+    return item;
+  });
+  const ids = new Set(upgraded.map((item) => item.id));
+  for (const item of baseSnapshot.items) {
+    if (item.k === "note" && !ids.has(item.id)) upgraded.push(structuredClone(item));
+  }
+  return { ...data, items: upgraded, version: 3 };
+}
+
 async function importJson(file) {
   try {
-    const data = JSON.parse(await file.text());
+    let data = JSON.parse(await file.text());
     if (!validData(data)) throw new Error("invalid data");
     if (!confirm("Importing replaces the current map and assets in this browser. Continue?")) return;
+    data = upgradeData(data);
     clearTimeout(saveTimer);
     items = data.items;
     assets = data.assets;
@@ -327,6 +349,17 @@ function renderGeometry() {
   geometryLayer.replaceChildren();
   for (const shape of geometry) renderShape(shape);
   $("#delete-shape").disabled = !selectedShape;
+}
+
+function renderNoteMasks() {
+  noteMasksLayer.replaceChildren();
+  for (const mask of plan.noteMasks) {
+    const rect = document.createElementNS(SVG_NS, "rect");
+    for (const key of ["x", "y", "w", "h"]) {
+      rect.setAttribute({ w: "width", h: "height" }[key] || key, mask[key]);
+    }
+    noteMasksLayer.append(rect);
+  }
 }
 
 function selectShape(id) {
@@ -397,9 +430,18 @@ function exportSvg() {
     }
     output.append(path);
   }
+  for (const mask of plan.noteMasks) {
+    const rect = document.createElementNS(SVG_NS, "rect");
+    rect.setAttribute("x", mask.x);
+    rect.setAttribute("y", mask.y);
+    rect.setAttribute("width", mask.w);
+    rect.setAttribute("height", mask.h);
+    rect.setAttribute("fill", "#fff");
+    output.append(rect);
+  }
   const colors = {
     person: "#c1121f", vacant: "#9aa3ad", seat: "#b45309", room: "#111",
-    printer: "#2f9e44", ap: "#1c7ed6", kiosk: "#0b5ed7", clock: "#c026d3",
+    printer: "#2f9e44", ap: "#1c7ed6", kiosk: "#0b5ed7", clock: "#c026d3", note: "#46505a",
   };
   const textScale = Number($("#text-scale").value);
   for (const item of items) {
@@ -470,12 +512,21 @@ function scale() {
   return svg.getScreenCTM()?.a || 1;
 }
 
+function mapTarget(item) {
+  if (!["person", "vacant"].includes(item.k) || !item.loc) return item;
+  const places = items.filter((other) =>
+    ["seat", "room"].includes(other.k) && locKey(other.t) === locKey(item.loc),
+  );
+  return places.length === 1 ? places[0] : item;
+}
+
 function updateRing() {
   const item = selection?.type === "item" ? findItem(selection.id) : null;
   ring.toggleAttribute("hidden", !item);
   if (!item) return;
-  ring.setAttribute("cx", item.x);
-  ring.setAttribute("cy", item.y);
+  const target = mapTarget(item);
+  ring.setAttribute("cx", target.x);
+  ring.setAttribute("cy", target.y);
   ring.setAttribute("r", 22 / scale());
 }
 
@@ -497,6 +548,7 @@ function zoomAt(factor, clientX, clientY) {
 }
 
 function zoomToItem(item) {
+  item = mapTarget(item);
   const width = 150;
   const height = (width * plan.height) / plan.width;
   view = { x: item.x - width / 2, y: item.y - height / 2, w: width, h: height };
@@ -718,6 +770,11 @@ function renderDetails() {
     h("span", { class: "badge" }, KINDS[item.k]?.label || item.k),
     item.loc ? h("p", { class: "meta" }, `Location: ${item.loc}`) : null,
     !item.loc && place ? h("p", { class: "meta" }, `Near: ${place.t}`) : null,
+    item.k === "note" ? h("p", { class: "warn" },
+      "Reconstructed from the PDF image. Verify unclear details against the ",
+      h("a", { href: "Floor-Plan-Completed-Labels-11-04-2026.pdf", target: "_blank", rel: "noopener" }, "original PDF"),
+      ".",
+    ) : null,
     h("p", {}, h("button", { type: "button", onclick: () => zoomToItem(item) }, "Zoom to this spot")),
   );
 
@@ -1179,16 +1236,19 @@ async function init() {
     if (!validData({ items: planData.items, assets: assetData, geometry: geometryData })) {
       throw new Error("invalid data files");
     }
-    plan = { width: planData.width, height: planData.height };
+    plan = { width: planData.width, height: planData.height, noteMasks: planData.noteMasks || [] };
     baseSnapshot = { items: planData.items, assets: assetData, geometry: geometryData };
     items = structuredClone(planData.items);
     assets = structuredClone(assetData);
     geometry = structuredClone(geometryData);
     let restored = false;
+    let upgraded = false;
     let storageError = false;
     try {
-      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+      let saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
       if (saved && validData(saved)) {
+        upgraded = (saved.version ?? 0) < 3;
+        saved = upgradeData(saved);
         items = saved.items;
         assets = saved.assets;
         if (saved.geometry) geometry = saved.geometry;
@@ -1201,11 +1261,14 @@ async function init() {
     }
     fitView();
     renderGeometry();
+    renderNoteMasks();
     renderAllItems();
     renderDetails();
     renderAssets();
     if (storageError) setStatus("Could not read saved edits in this browser. The original data is shown; export a backup before making changes.");
-    else if (restored) setStatus("Showing your saved edits from this browser. Reset (in Edit mode) restores the original data.");
+    else if (upgraded) {
+      if (saveNow()) setStatus("Your saved edits were kept and updated with the BP links and reconstructed notes.");
+    } else if (restored) setStatus("Showing your saved edits from this browser. Reset (in Edit mode) restores the original data.");
   } catch (error) {
     setStatus(`${error.message}. Serve this folder over HTTP (python3 -m http.server 8000) and keep the data/ folder beside index.html.`);
   }

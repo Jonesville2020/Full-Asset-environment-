@@ -131,6 +131,7 @@ input, select {
 #map:active { cursor: grabbing; }
 #map-bg { opacity: 0.45; pointer-events: none; }
 #map-geometry { pointer-events: none; }
+#note-masks { fill: #fff; pointer-events: none; }
 .layout-edit #map-geometry { pointer-events: all; }
 .layout-edit #map-items { pointer-events: none; }
 .layout-edit .geometry-shape { cursor: move; }
@@ -165,6 +166,7 @@ input, select {
 .k-vacant text { fill: #9aa3ad; }
 .k-seat text { fill: #b45309; }
 .k-room text { fill: #111; }
+.k-note text { fill: #46505a; }
 .k-printer text { fill: #2f9e44; }
 .k-ap text { fill: #1c7ed6; }
 .k-kiosk text { fill: #0b5ed7; }
