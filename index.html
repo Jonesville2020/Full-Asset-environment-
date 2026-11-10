@@ -38,10 +38,25 @@
             <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
             <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
             <button id="zoom-fit" type="button">Fit</button>
+            <button id="expand-map" type="button" aria-pressed="false">Expand map</button>
           </div>
           <label class="text-size">Label size
-            <input id="text-scale" type="range" min="1" max="4" step="0.25" value="1.25">
+            <input id="text-scale" type="range" min="0.5" max="2" step="0.1" value="0.7">
           </label>
+          <button id="layout-toggle" type="button" aria-pressed="false">Layout edit: off</button>
+          <button id="export-svg" type="button" title="Export editable traced paths and labels as SVG">Export SVG</button>
+          <label><input id="show-reference" type="checkbox"> Original reference</label>
+          <div id="layout-tools" class="layout-tools" hidden>
+            <label>Tool
+              <select id="layout-tool">
+                <option value="select">Select / move</option>
+                <option value="wall">Draw wall</option>
+                <option value="rectangle">Draw cubicle / room</option>
+              </select>
+            </label>
+            <button id="delete-shape" type="button" disabled>Delete selected</button>
+            <button id="undo-layout" type="button" disabled>Undo layout edit</button>
+          </div>
           <fieldset class="layers">
             <legend>Show</legend>
             <label><input type="checkbox" data-layer="people" checked> People</label>
@@ -60,11 +75,13 @@
         <div class="map-wrap">
           <svg id="map" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1224 792" role="img"
             aria-label="Floor plan. Click a name, cube, or room for details.">
-            <image id="map-bg" href="data/floorplan.svg" x="0" y="0" width="1224" height="792"/>
+            <image id="map-bg" href="data/floorplan.svg" x="0" y="0" width="1224" height="792" hidden/>
+            <g id="map-geometry"></g>
             <g id="map-items"></g>
+            <path id="drawing-preview" hidden></path>
             <circle id="ring" class="ring" r="10" hidden></circle>
           </svg>
-          <p class="map-hint">Scroll to zoom, drag to pan, click a label for details.<span class="edit-only"> Drag labels to move them.</span></p>
+          <p class="map-hint">Scroll to zoom, drag to pan, click a label for details.<span class="edit-only"> Drag labels to move them.</span><span id="layout-hint" hidden> Layout editing: select and drag a traced fragment, or choose a drawing tool.</span></p>
         </div>
       </section>
 

@@ -18,13 +18,19 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const $ = (selector) => document.querySelector(selector);
 const svg = $("#map");
 const itemLayer = $("#map-items");
+const geometryLayer = $("#map-geometry");
+const drawingPreview = $("#drawing-preview");
 const ring = $("#ring");
 
 let plan = { width: 1224, height: 792 };
 let items = [];
 let assets = [];
+let geometry = [];
 let baseSnapshot = null;
 let editMode = false;
+let layoutEdit = false;
+let selectedShape = null;
+let layoutHistory = [];
 let selection = null;
 let view = { x: 0, y: 0, w: 1224, h: 792 };
 let index = null;
@@ -33,6 +39,7 @@ let saveTimer = null;
 let assetPage = 1;
 let assetSort = { key: "type", dir: 1 };
 const nodes = new Map();
+const geometryNodes = new Map();
 
 function h(tag, props = {}, ...children) {
   const element = document.createElement(tag);
@@ -176,7 +183,7 @@ function setStatus(message) {
 
 function saveNow() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ items, assets }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ items, assets, geometry }));
     setStatus("Changes saved in this browser. Use Export to back them up or share them.");
   } catch {
     setStatus("Could not save in this browser (storage is full or blocked). Use Export to keep your changes.");
@@ -189,7 +196,7 @@ function save() {
 }
 
 function exportJson() {
-  const data = JSON.stringify({ version: 1, width: plan.width, height: plan.height, items, assets }, null, 1);
+  const data = JSON.stringify({ version: 2, width: plan.width, height: plan.height, items, assets, geometry }, null, 1);
   download("floor-plan-and-assets.json", data, "application/json");
 }
 
@@ -219,6 +226,17 @@ function download(filename, content, type) {
 
 function validData(data) {
   if (!data || !Array.isArray(data.items) || !Array.isArray(data.assets)) return false;
+  if (data.geometry != null) {
+    if (!Array.isArray(data.geometry)) return false;
+    const shapeIds = new Set();
+    for (const shape of data.geometry) {
+      if (!shape || typeof shape.id !== "string" || shapeIds.has(shape.id) ||
+          typeof shape.d !== "string" || !/^[MmLlHhVvZz0-9.,\s+-]+$/.test(shape.d) ||
+          !Number.isFinite(shape.x) || !Number.isFinite(shape.y) ||
+          !["trace", "wall", "rectangle"].includes(shape.kind)) return false;
+      shapeIds.add(shape.id);
+    }
+  }
   const ids = new Set();
   for (const item of data.items) {
     if (!item || typeof item.id !== "string" || ids.has(item.id) ||
@@ -243,9 +261,11 @@ async function importJson(file) {
   try {
     const data = JSON.parse(await file.text());
     if (!validData(data)) throw new Error("invalid data");
+    if (!confirm("Importing replaces the current map and assets in this browser. Continue?")) return;
     clearTimeout(saveTimer);
     items = data.items;
     assets = data.assets;
+    geometry = data.geometry ?? structuredClone(baseSnapshot.geometry);
     afterDataReplaced();
     saveNow();
     setStatus(`Imported ${items.length} map labels and ${assets.length} assets. Saved in this browser.`);
@@ -265,6 +285,7 @@ function resetData() {
   }
   items = structuredClone(baseSnapshot.items);
   assets = structuredClone(baseSnapshot.assets);
+  geometry = structuredClone(baseSnapshot.geometry);
   afterDataReplaced();
   setStatus("Restored the original data.");
 }
@@ -272,6 +293,10 @@ function resetData() {
 function afterDataReplaced() {
   index = null;
   selection = null;
+  selectedShape = null;
+  layoutHistory = [];
+  $("#undo-layout").disabled = true;
+  renderGeometry();
   renderAllItems();
   updateRing();
   renderDetails();
@@ -280,9 +305,121 @@ function afterDataReplaced() {
 
 /* ---------- map ---------- */
 
+function renderShape(shape) {
+  let node = geometryNodes.get(shape.id);
+  if (!node) {
+    node = document.createElementNS(SVG_NS, "path");
+    node.dataset.id = shape.id;
+    geometryNodes.set(shape.id, node);
+    geometryLayer.append(node);
+  }
+  node.setAttribute("class", `geometry-shape${shape.id === selectedShape ? " selected" : ""}`);
+  node.setAttribute("d", shape.d);
+  node.setAttribute("transform", `translate(${shape.x} ${shape.y})`);
+  node.setAttribute("fill", shape.kind === "trace" ? "#222" : "none");
+  node.setAttribute("fill-rule", "evenodd");
+  node.setAttribute("stroke", shape.kind === "trace" ? "none" : "#222");
+  node.setAttribute("stroke-width", "0.8");
+}
+
+function renderGeometry() {
+  geometryNodes.clear();
+  geometryLayer.replaceChildren();
+  for (const shape of geometry) renderShape(shape);
+  $("#delete-shape").disabled = !selectedShape;
+}
+
+function selectShape(id) {
+  if (selectedShape && geometryNodes.has(selectedShape)) {
+    geometryNodes.get(selectedShape).classList.remove("selected");
+  }
+  selectedShape = id;
+  if (id && geometryNodes.has(id)) geometryNodes.get(id).classList.add("selected");
+  $("#delete-shape").disabled = !id;
+}
+
+function deleteShape() {
+  if (!selectedShape) return;
+  rememberLayout();
+  geometry = geometry.filter((shape) => shape.id !== selectedShape);
+  geometryNodes.get(selectedShape)?.remove();
+  geometryNodes.delete(selectedShape);
+  selectShape(null);
+  save();
+}
+
+function rememberLayout(snapshot = JSON.stringify(geometry)) {
+  layoutHistory.push(snapshot);
+  if (layoutHistory.length > 20) layoutHistory.shift();
+  $("#undo-layout").disabled = false;
+}
+
+function undoLayout() {
+  if (!layoutHistory.length) return;
+  geometry = JSON.parse(layoutHistory.pop());
+  selectedShape = null;
+  renderGeometry();
+  $("#undo-layout").disabled = !layoutHistory.length;
+  save();
+}
+
+function pointOnMap(event) {
+  const point = svg.createSVGPoint();
+  point.x = event.clientX;
+  point.y = event.clientY;
+  return point.matrixTransform(svg.getScreenCTM().inverse());
+}
+
+function drawingPath(kind, start, end) {
+  const round = (value) => Math.round(value * 10) / 10;
+  const x1 = round(start.x);
+  const y1 = round(start.y);
+  const x2 = round(end.x);
+  const y2 = round(end.y);
+  return kind === "wall" ? `M${x1} ${y1}L${x2} ${y2}` : `M${x1} ${y1}H${x2}V${y2}H${x1}Z`;
+}
+
+function exportSvg() {
+  const output = document.createElementNS(SVG_NS, "svg");
+  output.setAttribute("xmlns", SVG_NS);
+  output.setAttribute("viewBox", `0 0 ${plan.width} ${plan.height}`);
+  output.setAttribute("width", plan.width * 2);
+  output.setAttribute("height", plan.height * 2);
+  for (const shape of geometry) {
+    const path = document.createElementNS(SVG_NS, "path");
+    path.setAttribute("d", shape.d);
+    path.setAttribute("transform", `translate(${shape.x} ${shape.y})`);
+    path.setAttribute("fill", shape.kind === "trace" ? "#222" : "none");
+    path.setAttribute("fill-rule", "evenodd");
+    if (shape.kind !== "trace") {
+      path.setAttribute("stroke", "#222");
+      path.setAttribute("stroke-width", "0.8");
+    }
+    output.append(path);
+  }
+  const colors = {
+    person: "#c1121f", vacant: "#9aa3ad", seat: "#b45309", room: "#111",
+    printer: "#2f9e44", ap: "#1c7ed6", kiosk: "#0b5ed7", clock: "#c026d3",
+  };
+  const textScale = Number($("#text-scale").value);
+  for (const item of items) {
+    const text = document.createElementNS(SVG_NS, "text");
+    text.setAttribute("transform", `translate(${item.x} ${item.y}) rotate(${item.r || 0})`);
+    text.setAttribute("font-family", "Arial, sans-serif");
+    text.setAttribute("font-size", item.s * textScale);
+    text.setAttribute("text-anchor", "middle");
+    text.setAttribute("dominant-baseline", "central");
+    text.setAttribute("fill", colors[item.k] || "#444");
+    text.textContent = item.t;
+    output.append(text);
+  }
+  download("editable-floor-plan.svg", new XMLSerializer().serializeToString(output), "image/svg+xml");
+}
+
 function itemSize(item) {
-  const width = Math.max(item.t.length * item.s * 0.56, item.s * 2) + 2;
-  return { width, height: item.s * 1.6 + 1 };
+  const size = item.s * Number($("#text-scale").value);
+  const width = Math.max(item.t.length * size * 0.56, size * 2) + 2;
+  return { width, height: size * 1.6 + 1 };
 }
 
 function renderItem(item) {
@@ -382,6 +519,29 @@ svg.addEventListener("wheel", (event) => {
 
 svg.addEventListener("pointerdown", (event) => {
   if (event.button !== 0) return;
+  if (layoutEdit) {
+    const tool = $("#layout-tool").value;
+    const shapeNode = event.target.closest(".geometry-shape");
+    const shape = shapeNode ? geometry.find((entry) => entry.id === shapeNode.dataset.id) : null;
+    if (tool !== "select") {
+      const start = pointOnMap(event);
+      drag = { mode: "draw", tool, start, end: start, startX: event.clientX, startY: event.clientY, moved: false };
+      selectShape(null);
+      svg.setPointerCapture(event.pointerId);
+      return;
+    }
+    if (shape) {
+      selectShape(shape.id);
+      drag = {
+        mode: "shape", shape, origin: { x: shape.x, y: shape.y },
+        startX: event.clientX, startY: event.clientY, moved: false,
+        before: JSON.stringify(geometry),
+      };
+      svg.setPointerCapture(event.pointerId);
+      return;
+    }
+    selectShape(null);
+  }
   const group = event.target.closest(".item");
   const item = group ? findItem(group.dataset.id) : null;
   drag = {
@@ -403,7 +563,15 @@ svg.addEventListener("pointermove", (event) => {
   if (!drag.moved && Math.hypot(dx, dy) < 4) return;
   drag.moved = true;
   const factor = scale();
-  if (drag.mode === "item") {
+  if (drag.mode === "draw") {
+    drag.end = pointOnMap(event);
+    drawingPreview.setAttribute("d", drawingPath(drag.tool, drag.start, drag.end));
+    drawingPreview.removeAttribute("hidden");
+  } else if (drag.mode === "shape") {
+    drag.shape.x = Math.round((drag.origin.x + dx / factor) * 10) / 10;
+    drag.shape.y = Math.round((drag.origin.y + dy / factor) * 10) / 10;
+    renderShape(drag.shape);
+  } else if (drag.mode === "item") {
     drag.item.x = Math.round((drag.origin.x + dx / factor) * 10) / 10;
     drag.item.y = Math.round((drag.origin.y + dy / factor) * 10) / 10;
     renderItem(drag.item);
@@ -418,7 +586,24 @@ svg.addEventListener("pointerup", () => {
   if (!drag) return;
   const finished = drag;
   drag = null;
-  if (!finished.moved) {
+  if (finished.mode === "draw") {
+    drawingPreview.setAttribute("hidden", "");
+    if (!finished.moved) return;
+    rememberLayout();
+    const shape = {
+      id: `g-${crypto.randomUUID()}`, kind: finished.tool,
+      d: drawingPath(finished.tool, finished.start, finished.end), x: 0, y: 0,
+    };
+    geometry.push(shape);
+    renderShape(shape);
+    selectShape(shape.id);
+    save();
+  } else if (finished.mode === "shape") {
+    if (finished.moved) {
+      rememberLayout(finished.before);
+      save();
+    }
+  } else if (!finished.moved && !layoutEdit) {
     selectItem(finished.item, false);
   } else if (finished.mode === "item") {
     index = null;
@@ -427,7 +612,14 @@ svg.addEventListener("pointerup", () => {
   }
 });
 
-svg.addEventListener("pointercancel", () => { drag = null; });
+svg.addEventListener("pointercancel", () => {
+  if (drag?.mode === "shape") {
+    Object.assign(drag.shape, drag.origin);
+    renderShape(drag.shape);
+  }
+  drawingPreview.setAttribute("hidden", "");
+  drag = null;
+});
 
 /* ---------- selection and details ---------- */
 
@@ -871,6 +1063,12 @@ function focusAsset(tag) {
 /* ---------- ui wiring ---------- */
 
 function showTab(name) {
+  if ($(".workspace").classList.contains("expanded")) {
+    $(".workspace").classList.remove("expanded");
+    $("#expand-map").setAttribute("aria-pressed", "false");
+    $("#expand-map").textContent = "Expand map";
+    requestAnimationFrame(updateRing);
+  }
   for (const button of document.querySelectorAll("[data-tab]")) {
     button.setAttribute("aria-selected", String(button.dataset.tab === name));
   }
@@ -879,6 +1077,7 @@ function showTab(name) {
 }
 
 function setEditMode(on) {
+  if (on && layoutEdit) setLayoutEdit(false);
   editMode = on;
   document.body.classList.toggle("editing", on);
   const toggle = $("#edit-toggle");
@@ -888,8 +1087,34 @@ function setEditMode(on) {
   renderAssets();
 }
 
+function setLayoutEdit(on) {
+  if (on && editMode) setEditMode(false);
+  layoutEdit = on;
+  svg.classList.toggle("layout-edit", on);
+  $("#layout-toggle").setAttribute("aria-pressed", String(on));
+  $("#layout-toggle").textContent = `Layout edit: ${on ? "on" : "off"}`;
+  $("#layout-tools").hidden = !on;
+  $("#layout-hint").hidden = !on;
+  if (!on) selectShape(null);
+  if (on) setStatus("The linework is an approximate trace, split into editable fragments. Compare it with the original reference.");
+}
+
 function wire() {
   $("#edit-toggle").addEventListener("click", () => setEditMode(!editMode));
+  $("#layout-toggle").addEventListener("click", () => setLayoutEdit(!layoutEdit));
+  $("#delete-shape").addEventListener("click", deleteShape);
+  $("#undo-layout").addEventListener("click", undoLayout);
+  $("#layout-tool").addEventListener("change", () => selectShape(null));
+  $("#show-reference").addEventListener("change", (event) => {
+    $("#map-bg").toggleAttribute("hidden", !event.target.checked);
+  });
+  $("#export-svg").addEventListener("click", exportSvg);
+  $("#expand-map").addEventListener("click", (event) => {
+    const expanded = $(".workspace").classList.toggle("expanded");
+    event.target.setAttribute("aria-pressed", String(expanded));
+    event.target.textContent = expanded ? "Show details" : "Expand map";
+    requestAnimationFrame(updateRing);
+  });
   $("#export-json").addEventListener("click", exportJson);
   $("#export-csv").addEventListener("click", exportCsv);
   $("#reset-data").addEventListener("click", resetData);
@@ -903,6 +1128,7 @@ function wire() {
   $("#zoom-fit").addEventListener("click", fitView);
   $("#text-scale").addEventListener("input", (event) => {
     document.documentElement.style.setProperty("--text-scale", event.target.value);
+    for (const item of items) renderItem(item);
   });
   for (const box of document.querySelectorAll("[data-layer]")) {
     box.addEventListener("change", () => svg.classList.toggle(`hide-${box.dataset.layer}`, !box.checked));
@@ -929,7 +1155,8 @@ function wire() {
   document.addEventListener("keydown", (event) => {
     const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName);
     if (event.key === "Escape" && !typing) selectItem(null, false);
-    if (event.key === "Delete" && editMode && !typing && selection?.type === "item") {
+    if (event.key === "Delete" && layoutEdit && !typing && selectedShape) deleteShape();
+    else if (event.key === "Delete" && editMode && !typing && selection?.type === "item") {
       const item = findItem(selection.id);
       if (item) deleteItem(item);
     }
@@ -940,17 +1167,23 @@ function wire() {
 async function init() {
   wire();
   try {
-    const [planResponse, assetsResponse] = await Promise.all([
+    const [planResponse, assetsResponse, geometryResponse] = await Promise.all([
       fetch("data/floorplan.json"),
       fetch("data/assets.json"),
+      fetch("data/floorplan-geometry.json"),
     ]);
-    if (!planResponse.ok || !assetsResponse.ok) throw new Error("data files missing");
+    if (!planResponse.ok || !assetsResponse.ok || !geometryResponse.ok) throw new Error("data files missing");
     const planData = await planResponse.json();
     const assetData = await assetsResponse.json();
+    const geometryData = await geometryResponse.json();
+    if (!validData({ items: planData.items, assets: assetData, geometry: geometryData })) {
+      throw new Error("invalid data files");
+    }
     plan = { width: planData.width, height: planData.height };
-    baseSnapshot = { items: planData.items, assets: assetData };
+    baseSnapshot = { items: planData.items, assets: assetData, geometry: geometryData };
     items = structuredClone(planData.items);
     assets = structuredClone(assetData);
+    geometry = structuredClone(geometryData);
     let restored = false;
     let storageError = false;
     try {
@@ -958,6 +1191,7 @@ async function init() {
       if (saved && validData(saved)) {
         items = saved.items;
         assets = saved.assets;
+        if (saved.geometry) geometry = saved.geometry;
         restored = true;
       } else if (saved) {
         storageError = true;
@@ -966,6 +1200,7 @@ async function init() {
       storageError = true;
     }
     fitView();
+    renderGeometry();
     renderAllItems();
     renderDetails();
     renderAssets();
