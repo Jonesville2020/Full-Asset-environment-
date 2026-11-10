@@ -3,80 +3,116 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Browse the building floor plan and filter its asset inventory by recorded location.">
+    <meta name="description" content="Editable floor plan and asset inventory. Search people, rooms and assets and see where they are.">
     <link rel="icon" href="data:,">
     <title>Building Assets &amp; Floor Plan</title>
     <link rel="stylesheet" href="styles.css">
     <script src="app.js" defer></script>
   </head>
   <body>
-    <header class="page-header">
-      <div>
-        <p class="eyebrow">Building Department</p>
-        <h1>Assets &amp; Floor Plan</h1>
+    <header class="topbar">
+      <h1>Assets &amp; Floor Plan</h1>
+
+      <div class="search">
+        <input id="global-search" type="search" autocomplete="off"
+          placeholder="Search a person, room, cube, or asset tag…" aria-label="Search">
+        <ul id="search-results" class="search-results" hidden></ul>
       </div>
-      <p class="intro">Browse the floor plan alongside the asset inventory. Filter assets by their recorded location.</p>
+
+      <div class="actions">
+        <button id="edit-toggle" type="button" aria-pressed="false">Edit mode: off</button>
+        <button id="export-json" type="button" title="Download all edits as a JSON file">Export</button>
+        <label class="button" title="Load edits from an exported JSON file">
+          Import <input id="import-json" type="file" accept="application/json" hidden>
+        </label>
+        <button id="reset-data" type="button" class="danger edit-only" title="Discard all edits made in this browser">Reset</button>
+      </div>
     </header>
 
+    <p id="status" class="status" role="status"></p>
+
     <main class="workspace">
-      <section class="panel floor-plan" aria-labelledby="floor-plan-title">
-        <div class="panel-heading">
-          <div>
-            <h2 id="floor-plan-title">Floor plan</h2>
-            <p>Completed labels · November 4, 2026</p>
+      <section class="map-panel" aria-label="Floor plan">
+        <div class="map-toolbar">
+          <div class="zoom">
+            <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+            <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+            <button id="zoom-fit" type="button">Fit</button>
           </div>
-          <a href="Floor-Plan-Completed-Labels-11-04-2026.pdf" target="_blank" rel="noopener">Open PDF</a>
+          <label class="text-size">Label size
+            <input id="text-scale" type="range" min="1" max="4" step="0.25" value="1.25">
+          </label>
+          <fieldset class="layers">
+            <legend>Show</legend>
+            <label><input type="checkbox" data-layer="people" checked> People</label>
+            <label><input type="checkbox" data-layer="vacant" checked> Vacant</label>
+            <label><input type="checkbox" data-layer="seats" checked> Cube/counter IDs</label>
+            <label><input type="checkbox" data-layer="rooms" checked> Rooms</label>
+            <label><input type="checkbox" data-layer="printers" checked> Printers</label>
+            <label><input type="checkbox" data-layer="aps" checked> Access points</label>
+            <label><input type="checkbox" data-layer="other" checked> Other</label>
+          </fieldset>
+          <div class="add-item edit-only">
+            <select id="add-kind" aria-label="New label type"></select>
+            <button id="add-item" type="button">Add to map</button>
+          </div>
         </div>
-        <iframe
-          title="Completed and labeled building floor plan"
-          src="Floor-Plan-Completed-Labels-11-04-2026.pdf"
-        ></iframe>
+        <div class="map-wrap">
+          <svg id="map" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1224 792" role="img"
+            aria-label="Floor plan. Click a name, cube, or room for details.">
+            <image id="map-bg" href="data/floorplan.svg" x="0" y="0" width="1224" height="792"/>
+            <g id="map-items"></g>
+            <circle id="ring" class="ring" r="10" hidden></circle>
+          </svg>
+          <p class="map-hint">Scroll to zoom, drag to pan, click a label for details.<span class="edit-only"> Drag labels to move them.</span></p>
+        </div>
       </section>
 
-      <section class="panel inventory" aria-labelledby="inventory-title">
-        <div class="panel-heading">
-          <div>
-            <h2 id="inventory-title">Asset inventory</h2>
-            <p id="result-count" aria-live="polite">Loading assets…</p>
-          </div>
-          <a href="Assets_20261109_112156.csv" download>Download CSV</a>
+      <aside class="sidebar">
+        <div class="tabs" role="tablist">
+          <button id="tab-details" type="button" role="tab" aria-selected="true" data-tab="details">Details</button>
+          <button id="tab-assets" type="button" role="tab" aria-selected="false" data-tab="assets">Assets</button>
         </div>
 
-        <div class="filters">
-          <label>
-            Search assets
-            <input id="asset-search" type="search" placeholder="Tag, description, serial number…" autocomplete="off">
-          </label>
-          <label>
-            Recorded location
-            <select id="location-filter">
-              <option value="">All locations</option>
+        <section id="panel-details" class="tab-panel" role="tabpanel"></section>
+
+        <section id="panel-assets" class="tab-panel" role="tabpanel" hidden>
+          <div class="asset-filters">
+            <input id="asset-search" type="search" placeholder="Search tag, type, person…" aria-label="Search assets">
+            <select id="asset-type-filter" aria-label="Filter by type"></select>
+            <select id="asset-status-filter" aria-label="Filter by status">
+              <option value="">Everything</option>
+              <option value="assigned">Assigned to a person/seat</option>
+              <option value="storage">In storage</option>
+              <option value="unassigned">Unassigned</option>
             </select>
-          </label>
-          <button id="clear-filters" type="button">Clear filters</button>
-        </div>
-
-        <p id="load-error" class="load-error" role="alert" hidden></p>
-
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">Asset tag</th>
-                <th scope="col">Description</th>
-                <th scope="col">Type</th>
-                <th scope="col">Location</th>
-                <th scope="col">Condition</th>
-                <th scope="col">Assignee</th>
-              </tr>
-            </thead>
-            <tbody id="asset-rows"></tbody>
-          </table>
-        </div>
-      </section>
+          </div>
+          <div class="asset-bar">
+            <span id="asset-count"></span>
+            <span class="edit-only">
+              <button id="add-asset" type="button">Add asset</button>
+            </span>
+            <button id="export-csv" type="button">Export CSV</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th><button type="button" data-sort="tag">Tag</button></th>
+                  <th><button type="button" data-sort="type">Type</button></th>
+                  <th><button type="button" data-sort="assignee">Assigned to</button></th>
+                  <th class="edit-only"><span class="sr-only">Delete</span></th>
+                </tr>
+              </thead>
+              <tbody id="asset-rows"></tbody>
+            </table>
+          </div>
+          <button id="more-assets" type="button" hidden>Show more</button>
+        </section>
+      </aside>
     </main>
-    <footer>
-      Location filtering reflects the inventory CSV. Assets are not individually plotted on the PDF.
-    </footer>
+
+    <datalist id="type-options"></datalist>
+    <datalist id="assignee-options"></datalist>
   </body>
 </html>

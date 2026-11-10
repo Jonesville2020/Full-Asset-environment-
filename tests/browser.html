@@ -1,0 +1,96 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Floor plan browser checks</title>
+<pre id="result">Running…</pre>
+<iframe id="app" src="../index.html"></iframe>
+<script>
+  const result = document.querySelector("#result");
+  const frame = document.querySelector("#app");
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const assert = (condition, message) => {
+    if (!condition) throw new Error(message);
+  };
+  const loaded = () => new Promise((resolve) => frame.addEventListener("load", resolve, { once: true }));
+  async function ready() {
+    for (let i = 0; i < 100; i += 1) {
+      if (frame.contentDocument.querySelector("#asset-count")?.textContent.includes("assets")) return;
+      await wait(50);
+    }
+    throw new Error("App did not load");
+  }
+  function search(doc, value) {
+    const input = doc.querySelector("#global-search");
+    input.value = value;
+    input.dispatchEvent(new Event("input"));
+    const match = [...doc.querySelectorAll("#search-results li")].find((item) => item.firstChild.textContent === value);
+    assert(match && match.textContent.includes(value), `Missing search result: ${value} (${match?.textContent || "none"})`);
+    match.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+  }
+  async function run() {
+    await loaded();
+    await ready();
+    let doc = frame.contentDocument;
+    assert(doc.querySelector("#asset-count").textContent.includes("1,276"), "Original assets missing");
+    assert([...doc.querySelector("#asset-type-filter").options].some((option) => option.value === "Monitor"), "Type filter missing options");
+    doc.querySelector("#asset-type-filter").value = "Monitor";
+    doc.querySelector("#asset-type-filter").dispatchEvent(new Event("input"));
+    assert(doc.querySelector("#asset-count").textContent.startsWith("584 "), "Type filter did not filter monitors");
+
+    localStorage.setItem("full-asset-environment.v1", JSON.stringify({
+      items: [
+        { id: "p1", k: "person", t: "Jane Smith", x: 100, y: 100, s: 4, r: 0, loc: "" },
+        { id: "p2", k: "person", t: "Jan Smith", x: 101, y: 101, s: 4, r: 0, loc: "" },
+        { id: "r1", k: "room", t: "Room 1", x: 102, y: 102, s: 4, r: 0, loc: "" }
+      ],
+      assets: [
+        { id: "a1", tag: "0001", type: "Monitor", assignee: "Jane Smith", model: "", serial: "", location: "" },
+        { id: "a2", tag: "0002", type: "Laptop", assignee: "Storage", model: "", serial: "", location: "Tech Storage" }
+      ]
+    }));
+    const reload = loaded();
+    frame.contentWindow.location.reload();
+    await reload;
+    await ready();
+    doc = frame.contentDocument;
+    search(doc, "Jan Smith");
+    assert(doc.querySelector("#panel-details").textContent.includes("No exact asset assignment"), "Similar names must not be matched automatically");
+    search(doc, "Room 1");
+    let details = doc.querySelector("#panel-details").textContent;
+    assert(details.includes("Nearby labels (approximate)"), "Nearby labels must be marked approximate");
+    assert(!details.includes("0001"), "Nearby person must not imply an asset assignment");
+
+    doc.querySelector("#edit-toggle").click();
+    search(doc, "Jan Smith");
+    const labels = [...doc.querySelectorAll("#panel-details label")];
+    const nameInput = labels.find((label) => label.textContent.includes("Asset assignee name")).querySelector("input");
+    nameInput.value = "Jane Smith";
+    nameInput.dispatchEvent(new Event("change"));
+    const locationInput = labels.find((label) => label.textContent.includes("Location note")).querySelector("input");
+    locationInput.value = "Room 1";
+    locationInput.dispatchEvent(new Event("input"));
+    await wait(350);
+    search(doc, "Room 1");
+    details = doc.querySelector("#panel-details").textContent;
+    assert(details.includes("People assigned to this location") && details.includes("0001"), "Explicit location and asset links did not work");
+    const saved = JSON.parse(localStorage.getItem("full-asset-environment.v1"));
+    assert(saved.items[1].loc === "Room 1" && saved.items[1].assignee === "Jane Smith", "Edits were not saved");
+    const invalid = new DataTransfer();
+    invalid.items.add(new File(['{"items":[{}],"assets":[]}'], "bad.json", { type: "application/json" }));
+    const input = doc.querySelector("#import-json");
+    input.files = invalid.files;
+    input.dispatchEvent(new Event("change"));
+    await wait(100);
+    assert(doc.querySelector("#status").textContent.includes("isn't a valid export"), "Invalid import was not rejected");
+    assert(JSON.parse(localStorage.getItem("full-asset-environment.v1")).items[1].loc === "Room 1", "Invalid import overwrote saved edits");
+    const restore = loaded();
+    frame.contentWindow.location.reload();
+    await restore;
+    await ready();
+    doc = frame.contentDocument;
+    search(doc, "Room 1");
+    assert(doc.querySelector("#panel-details").textContent.includes("0001"), "Linked assets did not survive reload");
+    localStorage.removeItem("full-asset-environment.v1");
+    result.textContent = "PASS";
+  }
+  run().catch((error) => { result.textContent = `FAIL: ${error.message}`; });
+</script>
