@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Browse the building floor plan and filter its asset inventory by recorded location.">
+    <link rel="icon" href="data:,">
+    <title>Building Assets &amp; Floor Plan</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">Building Department</p>
+        <h1>Assets &amp; Floor Plan</h1>
+      </div>
+      <p class="intro">Browse the floor plan alongside the asset inventory. Filter assets by their recorded location.</p>
+    </header>
+
+    <main class="workspace">
+      <section class="panel floor-plan" aria-labelledby="floor-plan-title">
+        <div class="panel-heading">
+          <div>
+            <h2 id="floor-plan-title">Floor plan</h2>
+            <p>Completed labels · November 4, 2026</p>
+          </div>
+          <a href="Floor-Plan-Completed-Labels-11-04-2026.pdf" target="_blank" rel="noopener">Open PDF</a>
+        </div>
+        <iframe
+          title="Completed and labeled building floor plan"
+          src="Floor-Plan-Completed-Labels-11-04-2026.pdf"
+        ></iframe>
+      </section>
+
+      <section class="panel inventory" aria-labelledby="inventory-title">
+        <div class="panel-heading">
+          <div>
+            <h2 id="inventory-title">Asset inventory</h2>
+            <p id="result-count" aria-live="polite">Loading assets…</p>
+          </div>
+          <a href="Assets_20261109_112156.csv" download>Download CSV</a>
+        </div>
+
+        <div class="filters">
+          <label>
+            Search assets
+            <input id="asset-search" type="search" placeholder="Tag, description, serial number…" autocomplete="off">
+          </label>
+          <label>
+            Recorded location
+            <select id="location-filter">
+              <option value="">All locations</option>
+            </select>
+          </label>
+          <button id="clear-filters" type="button">Clear filters</button>
+        </div>
+
+        <p id="load-error" class="load-error" role="alert" hidden></p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Asset tag</th>
+                <th scope="col">Description</th>
+                <th scope="col">Type</th>
+                <th scope="col">Location</th>
+                <th scope="col">Condition</th>
+                <th scope="col">Assignee</th>
+              </tr>
+            </thead>
+            <tbody id="asset-rows"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+    <footer>
+      Location filtering reflects the inventory CSV. Assets are not individually plotted on the PDF.
+    </footer>
+  </body>
+</html>
