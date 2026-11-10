@@ -74,8 +74,13 @@
     assert([...svg.querySelectorAll("path")].some((path) => path.getAttribute("transform") === "translate(1350 250)"), "Print omitted edited geometry");
     const box = svg.getAttribute("viewBox").split(" ").map(Number);
     assert(box[0] + box[2] >= 1380, "Print map clipped geometry outside the original bounds");
-    assert(doc.querySelector("#print-page-style").textContent.includes("landscape"), "Map is not landscape");
+    assert(doc.querySelector("#print-page-style").textContent.includes("17in 11in"), "Default map size is not 11 by 17 inches");
     assert(!root.querySelector("#ring") && !root.querySelector("image"), "Print included selection or reference image");
+    for (const [value, expected] of [["24x18", "24in 18in"], ["36x24", "36in 24in"]]) {
+      doc.querySelector("#map-paper-size").value = value;
+      doc.querySelector("#print-map").click();
+      assert(doc.querySelector("#print-page-style").textContent.includes(expected), `Map size ${value} not applied`);
+    }
     localStorage.removeItem("full-asset-environment.v1");
     result.textContent = "PASS";
   }

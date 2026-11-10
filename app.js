@@ -1055,13 +1055,22 @@ function buildAssetReport(assigned) {
   return root;
 }
 
-function printContent(content, landscape) {
+const MAP_PAPER_SIZES = {
+  "17x11": { width: 17, height: 11 },
+  "24x18": { width: 24, height: 18 },
+  "36x24": { width: 36, height: 24 },
+};
+
+function printContent(content, paperSize = null) {
   const old = $("#print-root");
   if (old) old.remove();
   const oldStyle = $("#print-page-style");
   if (oldStyle) oldStyle.remove();
   const pageStyle = h("style", { id: "print-page-style" });
-  pageStyle.textContent = `@page { size: ${landscape ? "landscape" : "portrait"}; margin: 10mm; }`;
+  pageStyle.textContent = paperSize
+    ? `@page { size: ${paperSize.width}in ${paperSize.height}in; margin: 0.4in; }
+       @media print { .print-map svg { width: 100%; height: ${paperSize.height - 0.8}in; } }`
+    : "@page { size: portrait; margin: 10mm; }";
   document.head.append(pageStyle);
   const root = h("div", { id: "print-root" }, content);
   document.body.append(root);
@@ -1087,7 +1096,7 @@ function printMap() {
   const right = Math.max(plan.width, bounds.x + bounds.width + margin);
   const bottom = Math.max(plan.height, bounds.y + bounds.height + margin);
   map.setAttribute("viewBox", `${left} ${top} ${right - left} ${bottom - top}`);
-  printContent(h("div", { class: "print-map" }, map), true);
+  printContent(h("div", { class: "print-map" }, map), MAP_PAPER_SIZES[$("#map-paper-size").value]);
 }
 
 function filteredAssets() {
@@ -1262,8 +1271,8 @@ function wire() {
   });
   $("#export-svg").addEventListener("click", exportSvg);
   $("#print-map").addEventListener("click", printMap);
-  $("#report-assigned").addEventListener("click", () => printContent(buildAssetReport(true), false));
-  $("#report-unassigned").addEventListener("click", () => printContent(buildAssetReport(false), false));
+  $("#report-assigned").addEventListener("click", () => printContent(buildAssetReport(true)));
+  $("#report-unassigned").addEventListener("click", () => printContent(buildAssetReport(false)));
   $("#expand-map").addEventListener("click", (event) => {
     const expanded = $(".workspace").classList.toggle("expanded");
     event.target.setAttribute("aria-pressed", String(expanded));

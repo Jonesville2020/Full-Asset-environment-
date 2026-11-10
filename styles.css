@@ -119,6 +119,7 @@ input, select {
 .zoom { display: flex; gap: 0.25rem; }
 .text-size { display: flex; align-items: center; gap: 0.4rem; }
 .text-size input { min-height: 0; padding: 0; }
+.paper-size { display: flex; align-items: center; gap: 0.4rem; }
 .layers { display: flex; flex-wrap: wrap; gap: 0.2rem 0.7rem; margin: 0; padding: 0; border: 0; }
 .layers legend { float: left; margin-right: 0.5rem; padding: 0; font-weight: 700; }
 .layers label { display: inline-flex; align-items: center; gap: 0.25rem; }
@@ -266,7 +267,7 @@ tr.row-link:hover { background: #f1f6fc; }
   body > :not(#print-root) { display: none !important; }
   #print-root { display: block; }
   .print-map { width: 100%; height: 100%; }
-  .print-map svg { display: block; width: 100%; height: auto; max-height: 180mm; }
+  .print-map svg { display: block; }
   .report { font-size: 10pt; color: #000; }
   .report h1 { margin: 0 0 0.3em; font-size: 18pt; }
   .report p { margin: 0.3em 0; }

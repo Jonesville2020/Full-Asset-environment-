@@ -22,8 +22,10 @@ size** changes the size of the text relative to the building.
 
 **Print map / PDF** prints the entire current map with all labels and layout
 edits, regardless of the visible map layers or zoom. In the print dialog,
-choose **Save as PDF** to create a PDF; use a larger paper size if labels are
-too small.
+choose **Save as PDF** to create a PDF. Select a map paper size before printing:
+11 × 17 inches by default, or 18 × 24 / 24 × 36 inches for larger prints.
+Make sure the print dialog or printer uses the same paper size; actual printer
+paper options depend on the printer and browser.
 
 The Assets tab has two print-ready reports, also available as PDFs through
 the print dialog. **Assigned asset report** groups every assigned asset by its
