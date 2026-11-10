@@ -237,6 +237,7 @@ input, select {
 .asset-filters { display: grid; gap: 0.4rem; }
 .asset-bar { display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: #4a5865; }
 .asset-bar span:first-child { flex: 1; }
+.report-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .table-wrap { flex: 1; min-height: 12rem; overflow: auto; border: 1px solid var(--border); border-radius: 0.35rem; }
 table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
 th { position: sticky; top: 0; z-index: 1; background: #f5f7f9; text-align: left; }
@@ -256,4 +257,23 @@ tr.row-link:hover { background: #f1f6fc; }
   .workspace { grid-template-columns: minmax(0, 1fr); }
   .map-panel { height: 70vh; }
   .sidebar { height: 80vh; }
+}
+
+#print-root { display: none; }
+
+@media print {
+  body { display: block; height: auto; min-width: 0; background: #fff; }
+  body > :not(#print-root) { display: none !important; }
+  #print-root { display: block; }
+  .print-map { width: 100%; height: 100%; }
+  .print-map svg { display: block; width: 100%; height: auto; max-height: 180mm; }
+  .report { font-size: 10pt; color: #000; }
+  .report h1 { margin: 0 0 0.3em; font-size: 18pt; }
+  .report p { margin: 0.3em 0; }
+  .report h2 { margin: 1em 0 0.3em; font-size: 12pt; break-after: avoid; }
+  .report-table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+  .report-table th, .report-table td { position: static; border: 1px solid #999; padding: 3pt 5pt; text-align: left; }
+  .report-table th { background: #eee; color: #000; }
+  .report-table thead { display: table-header-group; }
+  .report-table tr { break-inside: avoid; }
 }

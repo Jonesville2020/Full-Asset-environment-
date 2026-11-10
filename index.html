@@ -44,6 +44,7 @@
             <input id="text-scale" type="range" min="0.5" max="2" step="0.1" value="0.7">
           </label>
           <button id="layout-toggle" type="button" aria-pressed="false">Layout edit: off</button>
+          <button id="print-map" type="button" disabled>Print map / PDF</button>
           <button id="export-svg" type="button" title="Export editable traced paths and labels as SVG">Export SVG</button>
           <label><input id="show-reference" type="checkbox"> Original reference</label>
           <div id="layout-tools" class="layout-tools" hidden>
@@ -111,6 +112,10 @@
               <button id="add-asset" type="button">Add asset</button>
             </span>
             <button id="export-csv" type="button">Export CSV</button>
+          </div>
+          <div class="report-actions">
+            <button id="report-assigned" type="button" disabled>Assigned asset report</button>
+            <button id="report-unassigned" type="button" disabled>Unassigned / storage report</button>
           </div>
           <div class="table-wrap">
             <table>

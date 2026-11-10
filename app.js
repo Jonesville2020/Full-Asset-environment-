@@ -412,7 +412,7 @@ function drawingPath(kind, start, end) {
   return kind === "wall" ? `M${x1} ${y1}L${x2} ${y2}` : `M${x1} ${y1}H${x2}V${y2}H${x1}Z`;
 }
 
-function exportSvg() {
+function buildMapSvg() {
   const output = document.createElementNS(SVG_NS, "svg");
   output.setAttribute("xmlns", SVG_NS);
   output.setAttribute("viewBox", `0 0 ${plan.width} ${plan.height}`);
@@ -455,6 +455,11 @@ function exportSvg() {
     text.textContent = item.t;
     output.append(text);
   }
+  return output;
+}
+
+function exportSvg() {
+  const output = buildMapSvg();
   download("editable-floor-plan.svg", new XMLSerializer().serializeToString(output), "image/svg+xml");
 }
 
@@ -995,6 +1000,96 @@ function statusOf(asset) {
   return asset.assignee ? "assigned" : "unassigned";
 }
 
+function compareReportText(a, b) {
+  return String(a || "").localeCompare(String(b || ""), undefined, { sensitivity: "base" }) ||
+    String(a || "").localeCompare(String(b || ""));
+}
+
+function compareReportAssets(a, b) {
+  return compareReportText(a.type, b.type) || compareReportText(a.tag, b.tag);
+}
+
+function reportTable(list, includeStatus) {
+  const headings = includeStatus
+    ? ["Type", "Asset tag", "Status", "Recorded location"]
+    : ["Type", "Asset tag"];
+  return h("table", { class: "report-table" },
+    h("thead", {}, h("tr", {}, headings.map((heading) => h("th", { scope: "col" }, heading)))),
+    h("tbody", {}, list.map((asset) => h("tr", {},
+      h("td", {}, asset.type || "—"),
+      h("td", {}, asset.tag || "—"),
+      ...(includeStatus ? [
+        h("td", {}, statusOf(asset) === "storage" ? "Storage" : "Unassigned"),
+        h("td", {}, asset.location || "—"),
+      ] : []),
+    ))),
+  );
+}
+
+function buildAssetReport(assigned) {
+  const list = assets.filter((asset) => (statusOf(asset) === "assigned") === assigned);
+  const root = h("div", { class: "report" },
+    h("h1", {}, assigned ? "Assigned asset report" : "Unassigned and storage asset report"),
+    h("p", {}, `${list.length.toLocaleString()} assets · ${new Date().toLocaleString()}`),
+    h("p", {}, assigned
+      ? "Grouped by recorded assignee (including seats and rooms), then sorted by type and asset tag."
+      : "Includes assets marked Unassigned or Storage, sorted by type and asset tag."),
+  );
+  if (!list.length) {
+    root.append(h("p", {}, "No assets in this report."));
+  } else if (assigned) {
+    const groups = new Map();
+    for (const asset of list) {
+      if (!groups.has(asset.assignee)) groups.set(asset.assignee, []);
+      groups.get(asset.assignee).push(asset);
+    }
+    for (const [name, group] of [...groups].sort(([a], [b]) => compareReportText(a, b))) {
+      root.append(h("section", { class: "report-group" },
+        h("h2", {}, `${name} (${group.length})`),
+        reportTable(group.sort(compareReportAssets), false),
+      ));
+    }
+  } else {
+    root.append(reportTable(list.sort(compareReportAssets), true));
+  }
+  return root;
+}
+
+function printContent(content, landscape) {
+  const old = $("#print-root");
+  if (old) old.remove();
+  const oldStyle = $("#print-page-style");
+  if (oldStyle) oldStyle.remove();
+  const pageStyle = h("style", { id: "print-page-style" });
+  pageStyle.textContent = `@page { size: ${landscape ? "landscape" : "portrait"}; margin: 10mm; }`;
+  document.head.append(pageStyle);
+  const root = h("div", { id: "print-root" }, content);
+  document.body.append(root);
+  window.print();
+}
+
+window.addEventListener("afterprint", () => {
+  $("#print-root")?.remove();
+  $("#print-page-style")?.remove();
+});
+
+function printMap() {
+  const map = buildMapSvg();
+  // Measure the rendered geometry so edits moved outside the original page are included.
+  map.style.cssText = "position:fixed;left:-100000px;top:0;visibility:hidden";
+  document.body.append(map);
+  const bounds = map.getBBox();
+  map.remove();
+  map.removeAttribute("style");
+  const margin = 4;
+  const left = Math.min(0, bounds.x - margin);
+  const top = Math.min(0, bounds.y - margin);
+  const right = Math.max(plan.width, bounds.x + bounds.width + margin);
+  const bottom = Math.max(plan.height, bounds.y + bounds.height + margin);
+  map.setAttribute("viewBox", `${left} ${top} ${right - left} ${bottom - top}`);
+  printContent(h("div", { class: "print-map" }, map), true);
+}
+
 function filteredAssets() {
   const query = $("#asset-search").value.trim().toLowerCase();
   const type = $("#asset-type-filter").value;
@@ -1166,6 +1261,9 @@ function wire() {
     $("#map-bg").toggleAttribute("hidden", !event.target.checked);
   });
   $("#export-svg").addEventListener("click", exportSvg);
+  $("#print-map").addEventListener("click", printMap);
+  $("#report-assigned").addEventListener("click", () => printContent(buildAssetReport(true), false));
+  $("#report-unassigned").addEventListener("click", () => printContent(buildAssetReport(false), false));
   $("#expand-map").addEventListener("click", (event) => {
     const expanded = $(".workspace").classList.toggle("expanded");
     event.target.setAttribute("aria-pressed", String(expanded));
@@ -1265,6 +1363,9 @@ async function init() {
     renderAllItems();
     renderDetails();
     renderAssets();
+    for (const id of ["#print-map", "#report-assigned", "#report-unassigned"]) {
+      $(id).disabled = false;
+    }
     if (storageError) setStatus("Could not read saved edits in this browser. The original data is shown; export a backup before making changes.");
     else if (upgraded) {
       if (saveNow()) setStatus("Your saved edits were kept and updated with the BP links and reconstructed notes.");

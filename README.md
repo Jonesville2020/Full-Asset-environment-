@@ -20,6 +20,17 @@ vacant seats. Searching a listed person highlights their BP seat.
 Use **Expand map** and the zoom controls for more room on screen. **Label
 size** changes the size of the text relative to the building.
 
+**Print map / PDF** prints the entire current map with all labels and layout
+edits, regardless of the visible map layers or zoom. In the print dialog,
+choose **Save as PDF** to create a PDF; use a larger paper size if labels are
+too small.
+
+The Assets tab has two print-ready reports, also available as PDFs through
+the print dialog. **Assigned asset report** groups every assigned asset by its
+recorded assignee (including seats and rooms), then sorts by type and tag.
+**Unassigned / storage report** includes both unassigned and storage assets.
+Reports use all current inventory, not just the visible filters.
+
 Turn on **Layout edit** to select, move or delete traced fragments, or use
 the drawing tools to add walls and rectangular rooms or cubicles. Undo
 reverses up to 20 layout edits in the current session. Turn layout editing
